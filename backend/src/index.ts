@@ -4,9 +4,10 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 
-import { UserModel, ContentModel } from "./db";
+import { UserModel, ContentModel, LinkModel } from "./db";
 import "dotenv/config";
 import { UserMiddleware } from "./middleware";
+import { random } from "./utils";
 
 const JWT_PASSWORD = process.env.JWT_PASSWORD;
 if (!JWT_PASSWORD) {
@@ -96,7 +97,7 @@ app.post("/api/v1/content", UserMiddleware, async (req: Request, res: Response):
         await ContentModel.create({
             link,
             type,
-            // @ts-ignore
+        
             UserId: req.userId,
             tag: [],
         });
@@ -109,7 +110,7 @@ app.post("/api/v1/content", UserMiddleware, async (req: Request, res: Response):
 
 app.get("/api/v1/content", UserMiddleware, async (req: Request, res: Response): Promise<void> => {
     try {
-        // @ts-ignore
+    
         const userId = req.userId;
         const content = await ContentModel.find({ UserId: userId }).populate("UserId", "username");
 
@@ -125,7 +126,7 @@ app.delete("/api/v1/content", UserMiddleware, async (req: Request, res: Response
     try {
         const result = await ContentModel.deleteMany({
             contentId,
-            // @ts-ignore
+        
             UserId: req.userId,
         });
 
@@ -135,12 +136,67 @@ app.delete("/api/v1/content", UserMiddleware, async (req: Request, res: Response
     }
 });
 
-app.post("/api/v1/brain/share", (req: Request, res: Response): void => {
-    res.json({ message: "Brain share route is not implemented yet" });
-});
+app.post("/api/v1/brain/share", UserMiddleware, async (req: Request, res: Response): Promise<void> => {
+    const share = req.body.share;
+    if (share) {
+            const existingLink = await LinkModel.findOne({
+                userId: req.userId
+            });
 
-app.get("/api/v1/brain/:shareLink", (req: Request, res: Response): void => {
-    res.json({ message: "Brain fetch route is not implemented yet" });
+            if (existingLink) {
+                res.json({
+                    hash: existingLink.hash
+                })
+                return;
+            }
+            const hash = random(10);
+            await LinkModel.create({
+                userId: req.userId,
+                hash: hash
+            })
+
+            res.json({
+                hash
+            })
+    } else {
+        await LinkModel.deleteOne({
+            userId: req.userId
+        });
+
+        res.json({
+            message: "Removed link"
+        })
+    }
+})
+
+app.get("/api/v1/brain/:shareLink", async (req: Request, res: Response): Promise<void> => {
+    const hash = req.params.shareLink
+    const link = await LinkModel.findOne({
+        hash
+    })
+    if (!link) {
+        res.status(411).json({
+            message: "sorry incorrect input"
+        })
+        return;
+    }
+    const content = await ContentModel.find({
+        userId: link.UserId
+    })
+
+    const user = await UserModel.findOne({
+        _id: link.UserId
+    })
+    if (!user) {
+        res.status(411).json({
+            message: "user not found,error should ideally not happen , it happens only whne you delete the user the data from the db"
+        })
+        return;
+    }
+    res.json({
+        username:user.username,
+        content:content
+    })
 });
 
 app.listen(3000, () => {

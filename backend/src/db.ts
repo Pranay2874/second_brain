@@ -8,6 +8,7 @@ if (!MONGO_URL) {
 
 mongoose.connect(MONGO_URL)
 
+// users schema
 const UserSchema = new Schema({
     username: { type: String, unique: true },
     password: { type: String }
@@ -15,7 +16,7 @@ const UserSchema = new Schema({
 
 export const UserModel = mongoose.model("User", UserSchema);
 
-
+// content schema
 const ContentSchema = new Schema({
     title: String,
     link: String,
@@ -25,3 +26,12 @@ const ContentSchema = new Schema({
 })
 
 export const ContentModel = mongoose.model("Content", ContentSchema);
+
+//link schema
+const LinkSchema = new Schema({
+    hash: String,
+    UserId: { type: mongoose.Types.ObjectId, ref: 'User', required: true ,unique:true}
+
+})
+
+export const LinkModel = mongoose.model("Link", LinkSchema);
