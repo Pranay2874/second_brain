@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
-
+import cors from "cors";
 import { UserModel, ContentModel, LinkModel } from "./db";
 import "dotenv/config";
 import { UserMiddleware } from "./middleware";
@@ -11,12 +11,14 @@ import { random } from "./utils";
 
 const JWT_PASSWORD = process.env.JWT_PASSWORD;
 if (!JWT_PASSWORD) {
-    throw new Error("Missing environment variable: JWT_PASSWORD");
+    throw new Error("Missing environment variable: JWT_SECRET");
 }
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
+// Signup Route
 app.post("/api/v1/signup", async (req: Request, res: Response): Promise<void> => {
     const schema = z.object({
         username: z.string().min(3).max(100),
@@ -41,15 +43,20 @@ app.post("/api/v1/signup", async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
-        const hashedPassword = await bcrypt.hash(password, 5);
-        await UserModel.create({ username, password: hashedPassword });
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const user = await UserModel.create({ username, password: hashedPassword });
 
-        res.json({ message: "You are signed up" });
+        const token = jwt.sign({ userId: user._id }, JWT_PASSWORD, {
+            expiresIn: "1h",
+        });
+
+        res.status(201).json({ message: "You are signed up", token });
     } catch (e) {
         res.status(500).json({ message: "Internal server error", error: e });
     }
 });
 
+// Signin Route
 app.post("/api/v1/signin", async (req: Request, res: Response): Promise<void> => {
     const schema = z.object({
         username: z.string().min(3).max(100),
@@ -90,115 +97,84 @@ app.post("/api/v1/signin", async (req: Request, res: Response): Promise<void> =>
     }
 });
 
-app.post("/api/v1/content", UserMiddleware, async (req: Request, res: Response): Promise<void> => {
-    const { link, type } = req.body;
+app.post("/api/v1/content", UserMiddleware, async (req: Request, res: Response) => {
+    const { link, type, title } = req.body;
+    await ContentModel.create({
+        link,
+        type,
+        title,
+        userId: req.userId, // userId is added by the middleware.
+        tags: [] // Initialize tags as an empty array.
+    });
 
-    try {
-        await ContentModel.create({
-            link,
-            type,
-        
-            UserId: req.userId,
-            tag: [],
-        });
-
-        res.json({ message: "Content added" });
-    } catch (error) {
-        res.status(500).json({ message: "Error adding content", error });
-    }
+    res.json({ message: "Content added" }); // Send success response.
 });
 
-app.get("/api/v1/content", UserMiddleware, async (req: Request, res: Response): Promise<void> => {
-    try {
-    
-        const userId = req.userId;
-        const content = await ContentModel.find({ UserId: userId }).populate("UserId", "username");
-
-        res.json({ content });
-    } catch (error) {
-        res.status(500).json({ message: "Error fetching content", error });
-    }
+// Route 4: Get User Content
+app.get("/api/v1/content", UserMiddleware, async (req: Request, res: Response) => {
+    const userId = req.userId;  // User ID is fetched from middleware
+    const content = await ContentModel.find({ userId: userId }).populate("userId", "username");
+    res.json(content);  // Send the content as response
 });
 
-app.delete("/api/v1/content", UserMiddleware, async (req: Request, res: Response): Promise<void> => {
-    const { contentId } = req.body;
+// Route 5: Delete User Content
+app.delete("/api/v1/content", UserMiddleware, async (req: Request, res: Response) => {
+    const contentId = req.body.contentId;
 
-    try {
-        const result = await ContentModel.deleteMany({
-            contentId,
-        
-            UserId: req.userId,
-        });
-
-        res.json({ message: "Content deleted", deletedCount: result.deletedCount });
-    } catch (error) {
-        res.status(500).json({ message: "Error deleting content", error });
-    }
+    // Delete content based on contentId and userId.
+    await ContentModel.deleteMany({ contentId, userId: req.userId });
+    res.json({ message: "Deleted" }); // Send success response.
 });
 
-app.post("/api/v1/brain/share", UserMiddleware, async (req: Request, res: Response): Promise<void> => {
-    const share = req.body.share;
+// Route 6: Share Content Link
+app.post("/api/v1/brain/share", UserMiddleware, async (req: Request, res: Response) => {
+    const { share } = req.body;
     if (share) {
-            const existingLink = await LinkModel.findOne({
-                userId: req.userId
-            });
+        // Check if a link already exists for the user.
+        const existingLink = await LinkModel.findOne({ userId: req.userId });
+        if (existingLink) {
+            res.json({ hash: existingLink.hash }); // Send existing hash if found.
+            return;
+        }
 
-            if (existingLink) {
-                res.json({
-                    hash: existingLink.hash
-                })
-                return;
-            }
-            const hash = random(10);
-            await LinkModel.create({
-                userId: req.userId,
-                hash: hash
-            })
-
-            res.json({
-                hash
-            })
+        // Generate a new hash for the shareable link.
+        const hash = random(10);
+        await LinkModel.create({ userId: req.userId, hash });
+        res.json({ hash }); // Send new hash in the response.
     } else {
-        await LinkModel.deleteOne({
-            userId: req.userId
-        });
-
-        res.json({
-            message: "Removed link"
-        })
+        // Remove the shareable link if share is false.
+        await LinkModel.deleteOne({ userId: req.userId });
+        res.json({ message: "Removed link" }); // Send success response.
     }
-})
-
-app.get("/api/v1/brain/:shareLink", async (req: Request, res: Response): Promise<void> => {
-    const hash = req.params.shareLink
-    const link = await LinkModel.findOne({
-        hash
-    })
-    if (!link) {
-        res.status(411).json({
-            message: "sorry incorrect input"
-        })
-        return;
-    }
-    const content = await ContentModel.find({
-        userId: link.UserId
-    })
-
-    const user = await UserModel.findOne({
-        _id: link.UserId
-    })
-    if (!user) {
-        res.status(411).json({
-            message: "user not found,error should ideally not happen , it happens only whne you delete the user the data from the db"
-        })
-        return;
-    }
-    res.json({
-        username:user.username,
-        content:content
-    })
 });
 
+// Route 7: Get Shared Content
+app.get("/api/v1/brain/:shareLink", async (req: Request, res: Response) => {
+    const hash = req.params.shareLink;
+
+    // Find the link using the provided hash.
+    const link = await LinkModel.findOne({ hash });
+    if (!link) {
+        res.status(404).json({ message: "Invalid share link" }); // Send error if not found.
+        return;
+    }
+
+    // Fetch content and user details for the shareable link.
+    const content = await ContentModel.find({ userId: link.userId });
+    const user = await UserModel.findOne({ _id: link.userId });
+
+    if (!user) {
+        res.status(404).json({ message: "User not found" }); // Handle missing user case.
+        return;
+    }
+
+    res.json({
+        username: user.username,
+        content
+    }); // Send user and content details in response.
+});
+
+// Start the server
 app.listen(3000, () => {
-    console.log("Server running on port 3000");
+    console.log("Server is running on port 3000");
 });

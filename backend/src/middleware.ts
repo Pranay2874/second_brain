@@ -7,30 +7,25 @@ if (!JWT_PASSWORD) {
     throw new Error("Missing environment variable: JWT_PASSWORD");
 }
 
-// Extend the Request type to include the userId property
-declare module 'express' {
+declare module "express" {
     interface Request {
         userId?: string;
     }
 }
 
-export const UserMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  const header = req.headers["authorization"];
-  if (!header) {
-      res.status(403).json({
-          message: "You are not logged in"
-      });
-      return;
-  }
+export const UserMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+    const header = req.headers["authorization"];
 
-  try {
-      const decoded = jwt.verify(header, JWT_PASSWORD) as JwtPayload;
-      req.userId = decoded.userId;
-      console.log("Decoded userId:", req.userId);
-      next();
-  } catch (error) {
-      res.status(403).json({
-          message: "Invalid token"
-      });
-  }
+    if (!header) {
+        res.status(401).json({ message: "Unauthorized User" });
+        return;
+    }
+
+    try {
+        const decoded = jwt.verify(header, JWT_PASSWORD) as JwtPayload;
+        req.userId = decoded.userId;
+        next(); // Ensure we call next() properly
+    } catch (error) {
+        res.status(401).json({ message: "Unauthorized User" });
+    }
 };
