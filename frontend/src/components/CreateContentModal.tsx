@@ -3,34 +3,36 @@ import { CrossIcon } from "../icons/CrossIcon";
 import { Button } from "./Button";
 import { Input } from "./Input";
 import { BACKEND_URL } from "../config";
-import axios from "axios";
+import axios, { AxiosError } from "axios"; 
 
-// Enum to represent content types
 enum ContentType {
     Youtube = "youtube",
     Twitter = "twitter"
 }
 
-// Props interface for modal
 interface CreateContentModalProps {
     open: boolean;
     onClose: () => void;
-    refreshContent: () => void; // New prop to refresh content
 }
 
-// CreateContentModal component
-export function CreateContentModal({ open, onClose, refreshContent }: CreateContentModalProps) {
+export function CreateContentModal({ open, onClose }: CreateContentModalProps) {
     const titleRef = useRef<HTMLInputElement>(null);
     const linkRef = useRef<HTMLInputElement>(null);
     const [type, setType] = useState(ContentType.Youtube);
 
-    // Function to add content
     async function addContent() {
-        const title = titleRef.current?.value;
-        const link = linkRef.current?.value;
-
         try {
-            await axios.post(`${BACKEND_URL}/api/v1/content`, {
+            const title = titleRef.current?.value;
+            const link = linkRef.current?.value;
+
+            if (!title || !link) {
+                alert("Title and Link are required!");
+                return;
+            }
+
+            console.log("Submitting content:", { title, link, type });
+
+            const response = await axios.post(`${BACKEND_URL}/api/v1/content`, {
                 link,
                 title,
                 type
@@ -40,11 +42,13 @@ export function CreateContentModal({ open, onClose, refreshContent }: CreateCont
                 }
             });
 
-            // Refresh content list after successful addition
-            refreshContent();  // Call refresh function
-            onClose(); // Close modal
+            console.log("Content added successfully:", response.data);
+            onClose();
         } catch (error) {
-            console.error("Error adding content:", error);
+        
+            const axiosError = error as AxiosError;
+            console.error("Error adding content:", axiosError.response ? axiosError.response.data : axiosError.message);
+            alert("Failed to add content. Check the console for details.");
         }
     }
 

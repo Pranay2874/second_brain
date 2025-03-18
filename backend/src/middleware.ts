@@ -24,7 +24,7 @@ export const UserMiddleware = (req: Request, res: Response, next: NextFunction):
     try {
         const decoded = jwt.verify(header, JWT_PASSWORD) as JwtPayload;
         req.userId = decoded.userId;
-        next(); // Ensure we call next() properly
+        next(); 
     } catch (error) {
         res.status(401).json({ message: "Unauthorized User" });
     }
