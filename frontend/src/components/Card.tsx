@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 import { ShareIcon } from "../icons/ShareIcon";
+import { Bin } from "../icons/Bin";
+import { Notes } from "../icons/Notes";
 
 interface CardProps {
     title: string;
@@ -45,7 +47,7 @@ export function Card({ title, link, type }: CardProps) {
                 <div className="flex justify-between">
                     <div className="flex items-center text-md">
                         <div className="text-gray-500 pr-2">
-                            <ShareIcon />
+                            <Notes />
                         </div>
                         {title}
                     </div>
@@ -56,7 +58,7 @@ export function Card({ title, link, type }: CardProps) {
                             </a>
                         </div>
                         <div className="text-gray-500">
-                            <ShareIcon />
+                            <Bin />
                         </div>
                     </div>
                 </div>
