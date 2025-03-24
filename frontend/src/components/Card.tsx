@@ -1,93 +1,83 @@
-import { useEffect } from "react";
 import { ShareIcon } from "../icons/ShareIcon";
-import { Bin } from "../icons/Bin";
 import { Notes } from "../icons/Notes";
+import { Bin } from "../icons/Bin";
+import axios from "axios";
+import { BACKEND_URL } from "../config";
+import { useContent } from "../hooks/useContent";
 
 interface CardProps {
+    id: string;
     title: string;
     link: string;
     type: "twitter" | "youtube";
 }
 
+export function Card({ id, title, link, type }: CardProps) {
+    const { refresh } = useContent();
 
-function getYouTubeVideoId(url: string): string | null {
-    const regex =
-        /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/;
-    const match = url.match(regex);
-    return match ? match[1] : null;
-}
-
-
-function loadTwitterScript() {
-    if (!(window as any).twttr) {
-        const script = document.createElement("script");
-        script.src = "https://platform.twitter.com/widgets.js";
-        script.async = true;
-        document.body.appendChild(script);
+    let embedUrl = link;
+    if (type === "youtube") {
+        embedUrl = link.replace("watch?v=", "embed/").split("&")[0];
+    } else if (type === "twitter") {
+        embedUrl = link.replace("x.com", "twitter.com");
     }
-}
 
-export function Card({ title, link, type }: CardProps) {
-    const videoId = getYouTubeVideoId(link);
-
-    useEffect(() => {
-        if (type === "twitter") {
-            loadTwitterScript();
-            setTimeout(() => {
-                if ((window as any).twttr) {
-                    (window as any).twttr.widgets.load();
-                }
-            }, 1000);
+    const handleDelete = async () => {
+        if (!id) {
+            console.error("Error: Missing content ID.");
+            return;
         }
-    }, [link, type]);
+
+        try {
+            console.log(`Deleting content with ID: ${id}`);
+            const response = await axios.delete(`${BACKEND_URL}/api/v1/content`, {
+                headers: {
+                    Authorization: localStorage.getItem("token"),
+                    "Content-Type": "application/json",
+                },
+                data: { contentId: id }, 
+            });
+
+            console.log("Delete response:", response.data);
+            refresh(); 
+        } catch (error) {
+            console.error("Error deleting content:", error);
+        }
+    };
 
     return (
-        <div>
-            <div className="p-4 bg-white rounded-md border-gray-200 max-w-72 border min-h-48 min-w-72">
-                <div className="flex justify-between">
-                    <div className="flex items-center text-md">
-                        <div className="text-gray-500 pr-2">
-                            <Notes />
-                        </div>
-                        {title}
+        <div className="p-4 bg-white rounded-md border-gray-200 max-w-72 border min-h-48 min-w-72">
+            <div className="flex justify-between">
+                <div className="flex items-center text-md">
+                    <div className="text-gray-500 pr-2">
+                        <Notes />
                     </div>
-                    <div className="flex items-center">
-                        <div className="pr-2 text-gray-500">
-                            <a href={link} target="_blank" rel="noopener noreferrer">
-                                <ShareIcon />
-                            </a>
-                        </div>
-                        <div className="text-gray-500">
-                            <Bin />
-                        </div>
-                    </div>
+                    {title}
                 </div>
-
-                <div className="pt-4">
-                    
-                    {type === "youtube" && videoId ? (
-                        <iframe
-                            className="w-full h-48"
-                            src={`https://www.youtube.com/embed/${videoId}`}
-                            title="YouTube video player"
-                            frameBorder="0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                            referrerPolicy="strict-origin-when-cross-origin"
-                            allowFullScreen
-                        ></iframe>
-                    ) : type === "youtube" ? (
-                        <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">
-                            Watch on YouTube
+                <div className="flex items-center">
+                    <div className="pr-2 text-gray-500">
+                        <a href={link} target="_blank">
+                            <ShareIcon />
                         </a>
-                    ) : null}
-
-                
-                    {type === "twitter" && (
-                        <blockquote className="twitter-tweet">
-                            <a href={link}>{link}</a>
-                        </blockquote>
-                    )}
+                    </div>
+                    <div className="text-gray-500 cursor-pointer" onClick={handleDelete}>
+                        <Bin />
+                    </div>
                 </div>
+            </div>
+
+            <div className="pt-4">
+                {type === "youtube" ? (
+                    <a href={link} target="_blank" rel="noopener noreferrer">
+                        <button className="text-blue-500">Watch on YouTube</button>
+                    </a>
+                ) : type === "twitter" ? (
+                    <blockquote className="twitter-tweet">
+                        <a href={embedUrl}></a>
+                    </blockquote>
+                ) : (
+                    <p className="text-gray-400">No preview available</p>
+                )}
             </div>
         </div>
     );

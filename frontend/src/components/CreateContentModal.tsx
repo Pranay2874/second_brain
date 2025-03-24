@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
-import { CrossIcon } from "../icons/CrossIcon";
+import { CrossIcon } from "../icons/CrossIcon"; 
 import { Button } from "./Button";
 import { Input } from "./Input";
 import { BACKEND_URL } from "../config";
-import axios, { AxiosError } from "axios"; 
+import axios from "axios";
+import { useContent } from "../hooks/useContent";  
 
 enum ContentType {
     Youtube = "youtube",
@@ -18,20 +19,15 @@ interface CreateContentModalProps {
 export function CreateContentModal({ open, onClose }: CreateContentModalProps) {
     const titleRef = useRef<HTMLInputElement>(null);
     const linkRef = useRef<HTMLInputElement>(null);
+    const { refresh } = useContent(); 
+    
     const [type, setType] = useState(ContentType.Youtube);
 
     async function addContent() {
+        const title = titleRef.current?.value;
+        const link = linkRef.current?.value;
+
         try {
-            const title = titleRef.current?.value;
-            const link = linkRef.current?.value;
-
-            if (!title || !link) {
-                alert("Title and Link are required!");
-                return;
-            }
-
-            console.log("Submitting content:", { title, link, type });
-
             const response = await axios.post(`${BACKEND_URL}/api/v1/content`, {
                 link,
                 title,
@@ -42,13 +38,14 @@ export function CreateContentModal({ open, onClose }: CreateContentModalProps) {
                 }
             });
 
-            console.log("Content added successfully:", response.data);
-            onClose();
+            if (response.status === 200) {
+                refresh();  
+                onClose();
+            } else {
+                console.error("Failed to add content");
+            }
         } catch (error) {
-        
-            const axiosError = error as AxiosError;
-            console.error("Error adding content:", axiosError.response ? axiosError.response.data : axiosError.message);
-            alert("Failed to add content. Check the console for details.");
+            console.error("Error adding content:", error);
         }
     }
 
